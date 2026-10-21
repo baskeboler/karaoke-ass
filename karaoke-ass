@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${KARAOKE_PYTHON:-}" ]]; then
+  python_bin="$KARAOKE_PYTHON"
+elif [[ -x "$project_dir/.venv/bin/python" ]]; then
+  python_bin="$project_dir/.venv/bin/python"
+else
+  python_bin=python3
+fi
+export PYTHONPATH="$project_dir/src${PYTHONPATH:+:$PYTHONPATH}"
+exec "$python_bin" -m karaoke_ass "$@"
