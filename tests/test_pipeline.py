@@ -36,7 +36,7 @@ def assert_ass(test,ass):
         test.assertGreaterEqual(a,last)
         test.assertGreater(b,a)
         test.assertEqual(sum(map(int,re.findall(r'\\k(?:f|o)?(\d+)',f[9]))),b-a)
-        last=b
+        last=a
 
 
 class SyllablesTests(unittest.TestCase):
@@ -121,6 +121,30 @@ class RenderTests(unittest.TestCase):
                 self.assertTrue(rows)
                 self.assertTrue(all(r['inicio_s']<r['fin_s'] for r in rows))
                 self.assertTrue(transcript)
+
+    def test_frame_preview_preserves_singing_times(self):
+        # Adjacent frames may overlap during the next frame's preview.
+        source = normalize([word('first', 1, 2), word('second', 2, 3)], 4, [])
+        units = timed_units(source, np.ones(400), {}, 'word', [])
+        self.options.max_chars = 5
+        for effect in ('k', 'kf', 'ko'):
+            self.options.effect = effect
+            for offset in (0, .3, -1.1):
+                self.options.offset = offset
+                ass, rows, transcript = render(units, self.options)
+                assert_ass(self, ass)
+                events = [line.split(',', 9) for line in ass.splitlines() if line.startswith('Dialogue:')]
+                for event, row in zip(events, rows):
+                    start = cs(event[1])
+                    singing_start = round(row['inicio_s']*100)
+                    self.assertEqual(start, max(0, singing_start-20))
+                    tags = re.findall(r'\\k(?:f|o)?(\d+)', event[9])
+                    if singing_start > start:
+                        self.assertTrue(event[9].startswith('{'+chr(92)+'k'+str(singing_start-start)+'}'))
+                        self.assertEqual(start+int(tags[0]), singing_start)
+                    self.assertEqual(cs(event[2]), round(row['fin_s']*100))
+                for text_line, row in zip(transcript, rows):
+                    self.assertEqual(cs(text_line[1:].split(' --> ')[0]), round(row['inicio_s']*100))
 
     def test_override_injection_is_plain_text(self):
         self.assertEqual(safe_text(r'{\pos(0,0)}Hi\Nbye'), '｛＼pos(0,0)｝Hi＼Nbye')

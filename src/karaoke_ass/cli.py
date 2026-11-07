@@ -23,6 +23,8 @@ def parser():
                          help='auto prueba CUDA y cambia a CPU si falta memoria; cuda exige GPU')
     command.add_argument('--threads', type=int, default=4, help='Hilos de CPU (por defecto: 4)')
     command.add_argument('--chunk-seconds', type=float, default=24, help='Tramo central, 5–24 s; se añaden 2 s de contexto a cada lado')
+    command.add_argument('--artist', help='Artista para buscar la letra; requiere --title')
+    command.add_argument('--title', help='Título para buscar la letra; requiere --artist')
     command.add_argument('--prompt', default='', help='Contexto léxico para Whisper, por ejemplo nombres propios')
     command.add_argument('--start', type=float, default=0, help='Inicio del intervalo en segundos del audio')
     command.add_argument('--end', type=float, help='Fin del intervalo en segundos del audio')
@@ -43,6 +45,12 @@ def parser():
 
 
 def validate(options):
+    if (options.artist is None) != (options.title is None):
+        raise ValueError('--artist y --title deben usarse juntos.')
+    if options.artist is not None:
+        options.artist, options.title = options.artist.strip(), options.title.strip()
+        if not options.artist or not options.title:
+            raise ValueError('--artist y --title no pueden estar vacíos.')
     if not options.audio.is_file():
         raise ValueError(f'No existe el audio: {options.audio}')
     for field in ('chunk_seconds','start','offset','max_duration'):
@@ -150,6 +158,7 @@ def run(options):
         if options.start or options.end is not None:
             original['interval'] = [options.start,interval_end]
         report = write_outputs(options.output, words, original, energy, mask, issues, options, duration)
+        lyrics_report = report.get('lyrics')
         manifest = {'version':__version__, 'source':str(options.audio.resolve()), 'source_sha256':source_hash,
                     'duration':duration, 'elapsed_seconds':round(time.monotonic()-started,2),
                     'model':original.get('model'), 'from_json':str(options.from_json) if options.from_json else None,
@@ -157,6 +166,8 @@ def run(options):
                     'options':{k:str(v) if isinstance(v,Path) else v for k,v in vars(options).items() if k!='overrides'},
                     'lines':report['lines'],'units':report['units'],'review_issues':len(issues),
                     'status':'draft_requires_review'}
+        if lyrics_report is not None:
+            manifest['lyrics'] = lyrics_report
         atomic_json(options.output/'ejecucion.json',manifest)
     print(f'ASS generado: {(options.output/"karaoke.ass").resolve()}')
     print(f'{report["lines"]} líneas, {report["units"]} unidades, {len(issues)} avisos. Cortes silábicos estimados.')

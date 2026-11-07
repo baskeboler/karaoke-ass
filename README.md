@@ -25,6 +25,29 @@ KARAOKE_PYTHON=/ruta/al/entorno/bin/python ./karaoke-ass vocals.mp3
 
 El lanzador elige, en este orden: `KARAOKE_PYTHON`, `.venv/bin/python` o `python3`. También se puede instalar el paquete y usar el comando `karaoke-ass` desde cualquier carpeta.
 
+## Entorno de desarrollo con mise
+
+Instala [mise](https://mise.jdx.dev/getting-started.html) y FFmpeg con el gestor de paquetes de tu sistema. Desde la raíz del proyecto:
+
+```bash
+mise trust
+mise install
+mise run setup
+mise run test
+```
+
+`mise.toml` selecciona Python 3.12 y crea/activa `.venv` automáticamente. `setup` instala el paquete en modo editable con sus dependencias básicas; no descarga Whisper ni sus modelos. La configuración reutiliza una `.venv` existente: si proviene de otra versión de Python, renómbrala antes de inicializar para que mise cree una nueva con Python 3.12. `.venv` permanece ignorada por Git.
+
+| Tarea | Función |
+| --- | --- |
+| `mise run setup` | Instalar o actualizar el entorno básico de desarrollo y tests. |
+| `mise run setup:speech` | Instalar además Whisper/PyTorch para transcribir audio. |
+| `mise run check:ffmpeg` | Comprobar FFmpeg, requerido por la suite completa y el procesamiento de audio. |
+| `mise run test` | Ejecutar toda la suite, comprobando antes FFmpeg. |
+| `mise run test:lyrics` | Ejecutar solo los tests de letras, sin necesitar FFmpeg. |
+
+Para trabajar con reconocimiento real, ejecuta `mise run setup:speech` y luego `mise exec -- karaoke-ass vocals.wav`. Esta instalación puede descargar dependencias grandes; los modelos se descargan al transcribir por primera vez. Las tareas de tests no instalan dependencias: ejecuta `setup` primero. El reconocimiento Whisper y las consultas HTTP se simulan en los tests. Puedes usar `mise exec -- python …` sin activar mise en tu shell.
+
 ## Uso
 
 ```bash
@@ -142,6 +165,8 @@ Este programa automatiza la primera versión que antes armamos con varias ejecuc
 
 ## Pruebas
 
+Con el entorno inicializado, ejecuta `mise run test` o `mise run test:lyrics`. También puedes ejecutar directamente:
+
 ```bash
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
@@ -149,3 +174,22 @@ PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 Las pruebas cubren silabeo, conservación del texto, tiempos inválidos, límites de ventana, repeticiones, reanudación, protección de salidas, pausas, desplazamientos y regeneración. Las pruebas del reconocedor usan un modelo simulado para comprobar el ensamblado; la prueba de reconocimiento con audio real se documenta por separado en `VALIDACION.md`.
 
 Referencias: [Whisper](https://github.com/openai/whisper), [etiquetas ASS de karaoke de Aegisub](https://aegisub.org/docs/latest/ass_tags/#karaoke-effect).
+
+## Corrección opcional con letras de internet
+
+```bash
+./karaoke-ass vocals.wav --artist "Modern Talking" --title "Cheri Cheri Lady"
+```
+
+`--artist` y `--title` deben incluirse juntos y no pueden estar vacíos. Después de completar Whisper, se consulta [LRCLIB](https://lrclib.net/docs) por artista y título, sin clave de API. También funciona con `--from-json`, para corregir una transcripción existente sin repetir Whisper. Sin estos argumentos no se consulta internet. Solo se envían artista y título; el audio y la transcripción permanecen locales.
+
+Las correcciones son conservadoras: se sustituyen únicamente palabras de similitud mínima 0,75 entre anclas únicas de al menos dos palabras coincidentes a cada lado. No se agregan ni eliminan palabras, ni se cambian sus tiempos. Las repeticiones ambiguas y otras diferencias se señalan para revisión. Las letras anteriores o posteriores al intervalo transcrito no se agregan. Los tiempos LRC no se utilizan.
+
+Primero se guarda `transcripcion.json`, luego se corrige ese archivo con la letra descargada y se vuelve a cargar el JSON corregido para generar ASS, TXT y TSV. `transcripcion.original.json` conserva la entrada sin corregir; el checkpoint tampoco cambia. `revision.json` y `ejecucion.json` registran la fuente, el identificador, el estado, las sustituciones y las diferencias sin resolver; `revision.txt` incluye un resumen y los avisos. El resultado sigue siendo un borrador pendiente de revisión auditiva.
+
+Si la consulta falla, tarda más de 10 segundos, no devuelve letra o sus metadatos no coinciden, se muestra un aviso y se generan los resultados con el texto original. El catálogo puede no incluir la canción o su versión específica.
+
+
+### Anticipación visual del karaoke
+
+Cada evento del ASS muestra el texto 200 ms antes de la primera palabra, sin adelantar el resaltado ni modificar los tiempos del JSON, TXT o TSV. Al comienzo del archivo, la anticipación se limita a cero. Los eventos consecutivos pueden coincidir durante esos 200 ms para mantener el final cantado de la frase anterior. Esta anticipación es independiente de `--offset`, que desplaza la sincronización completa.

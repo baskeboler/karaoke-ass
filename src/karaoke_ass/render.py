@@ -1,5 +1,7 @@
 """ASS output with exact centisecond sums, plus machine-editable companions."""
 import csv
+import json
+import sys
 from pathlib import Path
 import re
 from .recognition import atomic_json
@@ -68,6 +70,7 @@ WrapStyle: 0
 ScaledBorderAndShadow: yes
 ; Tiempos silábicos estimados. Ver revision.json y revision.txt.
 ; Desplazamiento de salida: {options.offset:+.2f} segundos.
+; Vista previa del texto: 200 ms antes del canto, limitada al inicio del audio.
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -78,7 +81,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 '''
     events, rows, transcript = [], [], []
     for line_number, group in enumerate(group_lines(shifted, options.max_chars, options.max_duration), 1):
-        start, end = group[0]['start_cs'], group[-1]['end_cs']
+        singing_start, end = group[0]['start_cs'], group[-1]['end_cs']
+        start = max(0, singing_start-20)
         line_text = plain_text(group)
         break_at = -1
         if len(line_text) > 42 and len(group) > 1:
@@ -102,18 +106,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if durations != end-start:
             raise ValueError('Error interno: las unidades no suman la duración del evento.')
         events.append(f'Dialogue: 0,{timestamp(start)},{timestamp(end)},Default,,0,0,0,,{text}')
-        transcript.append(f'[{timestamp(start)} --> {timestamp(end)}] {line_text}')
+        transcript.append(f'[{timestamp(singing_start)} --> {timestamp(end)}] {line_text}')
     return header+'\n'.join(events)+'\n', rows, transcript
 
 
-def write_outputs(directory: Path, words, original, energy, mask, issues, options, duration):
+def write_outputs(directory: Path, words, original, energy, mask, issues, options, duration, lyrics_report=None):
     from .timing import timed_units, coverage_issues
-    units = timed_units(words, energy, options.overrides, options.units, issues)
-    interval = original.get('interval', [0,duration])
-    coverage_issues(words, mask, issues, interval[0], interval[1])
-    ass, rows, transcript = render(units, options)
-    if not rows:
-        raise ValueError('No quedan subtítulos visibles después del desplazamiento.')
     normalized = {'schema_version': 1, 'timeline': 'source_audio_seconds',
                   'duration': duration, 'source_sha256': original.get('source_sha256'),
                   'interval': original.get('interval', [0, duration]),
@@ -122,6 +120,22 @@ def write_outputs(directory: Path, words, original, energy, mask, issues, option
     # Persist raw and normalized text separately so corrections can be regenerated.
     atomic_json(directory/'transcripcion.original.json', original)
     atomic_json(directory/'transcripcion.json', normalized)
+    if getattr(options, 'artist', None) is not None:
+        from .lyrics import correct_transcription
+        print('Corrigiendo transcripcion.json con la letra de LRCLIB…', file=sys.stderr, flush=True)
+        lyrics_report = correct_transcription(directory/'transcripcion.json', options.artist, options.title, issues)
+        if lyrics_report['status'] == 'unavailable':
+            print('Aviso: ' + lyrics_report['reason'] + ' Se conserva la transcripción.', file=sys.stderr)
+    # The corrected JSON is the canonical input for syllables and ASS rendering.
+    saved = json.loads((directory/'transcripcion.json').read_text(encoding='utf-8'))
+    words = [dict(word, start_cs=round(word['start']*100), end_cs=round(word['end']*100))
+             for word in saved['words']]
+    units = timed_units(words, energy, options.overrides, options.units, issues)
+    interval = saved['interval']
+    coverage_issues(words, mask, issues, interval[0], interval[1])
+    ass, rows, transcript = render(units, options)
+    if not rows:
+        raise ValueError('No quedan subtítulos visibles después del desplazamiento.')
     (directory/'karaoke.ass').write_text(ass, encoding='utf-8-sig')
     (directory/'transcripcion.txt').write_text('\n'.join(transcript)+'\n', encoding='utf-8')
     with (directory/'unidades.tsv').open('w', encoding='utf-8', newline='') as file:
@@ -129,8 +143,10 @@ def write_outputs(directory: Path, words, original, energy, mask, issues, option
         writer.writeheader()
         writer.writerows(rows)
     report = {'syllable_timing': 'estimated', 'verified_by_listening': False,
-              'offset_seconds': options.offset, 'issue_timeline': 'source_audio_seconds',
+              'offset_seconds': options.offset, 'preview_seconds': 0.2, 'issue_timeline': 'source_audio_seconds',
               'lines':len(transcript), 'units':len(rows), 'issues':issues}
+    if lyrics_report is not None:
+        report['lyrics'] = lyrics_report
     atomic_json(directory/'revision.json', report)
     summary = ['BORRADOR AUTOMÁTICO DE KARAOKE', '',
                'Los cortes entre sílabas son estimaciones, no una alineación fonética verificada.',
@@ -138,6 +154,10 @@ def write_outputs(directory: Path, words, original, energy, mask, issues, option
                'Puede haber errores de texto, voces omitidas, sinalefas y melismas sin representar.',
                f'Desplazamiento del ASS: {options.offset:+.2f} s. Los avisos usan tiempos del audio original.',
                f'{len(transcript)} líneas; {len(rows)} unidades; {len(issues)} avisos.', '']
+    if lyrics_report is not None:
+        summary.append(f"Letra LRCLIB: {lyrics_report['status']}; {len(lyrics_report['changes'])} correcciones.")
+        if lyrics_report['source']:
+            summary.append('Fuente: ' + lyrics_report['source']['url'])
     for issue in issues:
         summary.append(f"[{issue['start']:.2f}–{issue['end']:.2f}] {issue['code']}: {issue['text']} — {issue['message']}")
     (directory/'revision.txt').write_text('\n'.join(summary)+'\n', encoding='utf-8')
