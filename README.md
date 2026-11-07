@@ -1,33 +1,33 @@
 # Vocals → karaoke ASS
 
-Herramienta local para transformar una pista vocal de canción en subtítulos ASS de karaoke. Recibe un archivo y produce `karaoke.ass`, texto con timestamps, tiempos por sílaba y un informe de revisión. No requiere una API de pago ni envía el audio a un servicio remoto. Whisper puede descargar el modelo elegido en el primer uso.
+A local tool that turns a song's vocal track into ASS karaoke subtitles. It takes an audio file and produces `karaoke.ass`, timestamped text, syllable timings, and a review report. It does not require a paid API or send audio to a remote service. Whisper may download the selected model on first use.
 
-**El resultado es un borrador automático.** Los tiempos de palabra proceden de Whisper. La división ortográfica y los cortes internos entre sílabas se estiman con reglas de español/inglés y la energía del audio. No equivalen a una alineación fonética ni garantizan una letra correcta. Sinalefas, melismas, coros simultáneos y pronunciaciones especiales requieren revisión.
+**The result is an automatically generated draft.** Word timings come from Whisper. Spelling-based syllable splits and boundaries within words are estimated using Spanish/English rules and audio energy. They are not phonetic alignment and do not guarantee accurate lyrics. Linked vowels, melismas, simultaneous backing vocals, and unusual pronunciations require review.
 
-## Instalación
+## Installation
 
-Requiere Linux o macOS, Python 3.10 o posterior y FFmpeg accesible en el sistema. La versión de Whisper usada y probada es `20250625`; también se probó con PyTorch 2.10.0 y NumPy 2.4.3.
+Requires Linux or macOS, Python 3.10 or later, and FFmpeg available on the system. The Whisper version used and tested is `20250625`; the tool was also tested with PyTorch 2.10.0 and NumPy 2.4.3.
 
-Desde esta carpeta:
+From this directory:
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install '.[speech]'
 ```
 
-PyTorch puede instalar paquetes grandes. En un equipo que solo usará CPU se puede instalar primero la variante de CPU, siguiendo las instrucciones de [PyTorch](https://pytorch.org/get-started/locally/), y después instalar este proyecto.
+PyTorch may install large packages. On a CPU-only machine, you can install the CPU variant first, following the [PyTorch instructions](https://pytorch.org/get-started/locally/), then install this project.
 
-Si ya tienes un entorno con Whisper y NumPy, puedes reutilizarlo sin instalar otra copia:
+If you already have an environment with Whisper and NumPy, you can reuse it without installing another copy:
 
 ```bash
-KARAOKE_PYTHON=/ruta/al/entorno/bin/python ./karaoke-ass vocals.mp3
+KARAOKE_PYTHON=/path/to/environment/bin/python ./karaoke-ass vocals.mp3
 ```
 
-El lanzador elige, en este orden: `KARAOKE_PYTHON`, `.venv/bin/python` o `python3`. También se puede instalar el paquete y usar el comando `karaoke-ass` desde cualquier carpeta.
+The launcher selects, in order: `KARAOKE_PYTHON`, `.venv/bin/python`, or `python3`. You can also install the package and use the `karaoke-ass` command from any directory.
 
-## Entorno de desarrollo con mise
+## Development environment with mise
 
-Instala [mise](https://mise.jdx.dev/getting-started.html) y FFmpeg con el gestor de paquetes de tu sistema. Desde la raíz del proyecto:
+Install [mise](https://mise.jdx.dev/getting-started.html) and FFmpeg using your system's package manager. From the project root:
 
 ```bash
 mise trust
@@ -36,77 +36,77 @@ mise run setup
 mise run test
 ```
 
-`mise.toml` selecciona Python 3.12 y crea/activa `.venv` automáticamente. `setup` instala el paquete en modo editable con sus dependencias básicas; no descarga Whisper ni sus modelos. La configuración reutiliza una `.venv` existente: si proviene de otra versión de Python, renómbrala antes de inicializar para que mise cree una nueva con Python 3.12. `.venv` permanece ignorada por Git.
+`mise.toml` selects Python 3.12 and automatically creates/activates `.venv`. `setup` installs the package in editable mode with its basic dependencies; it does not download Whisper or its models. The configuration reuses an existing `.venv`: if it was created with another Python version, rename it before initialization so mise can create a new one with Python 3.12. `.venv` remains ignored by Git.
 
-| Tarea | Función |
+| Task | Purpose |
 | --- | --- |
-| `mise run setup` | Instalar o actualizar el entorno básico de desarrollo y tests. |
-| `mise run setup:speech` | Instalar además Whisper/PyTorch para transcribir audio. |
-| `mise run check:ffmpeg` | Comprobar FFmpeg, requerido por la suite completa y el procesamiento de audio. |
-| `mise run test` | Ejecutar toda la suite, comprobando antes FFmpeg. |
-| `mise run test:lyrics` | Ejecutar solo los tests de letras, sin necesitar FFmpeg. |
+| `mise run setup` | Install or update the basic development and testing environment. |
+| `mise run setup:speech` | Also install Whisper/PyTorch for audio transcription. |
+| `mise run check:ffmpeg` | Check FFmpeg, required by the full test suite and audio processing. |
+| `mise run test` | Run the full suite after checking FFmpeg. |
+| `mise run test:lyrics` | Run only the lyrics tests, without requiring FFmpeg. |
 
-Para trabajar con reconocimiento real, ejecuta `mise run setup:speech` y luego `mise exec -- karaoke-ass vocals.wav`. Esta instalación puede descargar dependencias grandes; los modelos se descargan al transcribir por primera vez. Las tareas de tests no instalan dependencias: ejecuta `setup` primero. El reconocimiento Whisper y las consultas HTTP se simulan en los tests. Puedes usar `mise exec -- python …` sin activar mise en tu shell.
+For real speech recognition, run `mise run setup:speech`, then `mise exec -- karaoke-ass vocals.wav`. Installation may download large dependencies; models are downloaded when you first transcribe. Test tasks do not install dependencies: run `setup` first. Whisper recognition and HTTP requests are mocked in tests. You can use `mise exec -- python …` without activating mise in your shell.
 
-## Uso
+## Usage
 
 ```bash
-./karaoke-ass /ruta/vocals.mp3 --output ./results/mi-cancion
+./karaoke-ass /path/to/vocals.mp3 --output ./results/my-song
 ```
 
-Ese único comando realiza todo el proceso. Por defecto usa Whisper `medium`, elige CPU o CUDA disponible y detecta el idioma por tramo. Mantiene los timestamps del archivo original, incluso si la canción empieza con silencio.
+This single command runs the entire process. By default, it uses Whisper `medium`, selects an available CPU or CUDA device, and detects the language per chunk. It preserves timestamps from the original file, even if the song starts with silence.
 
-Con `--device auto` (predeterminado), si CUDA se queda sin memoria al cargar el modelo, transcribir o reintentar un tramo, el proceso libera sus referencias al modelo GPU y vuelve a intentar ese trabajo en CPU. Conserva el mismo modelo y los tramos completados; los siguientes se procesan en CPU. La salida y el archivo `ejecucion.json` registran el cambio. `--device cuda` exige GPU: ante falta de memoria se detiene con un mensaje explicativo.
+With `--device auto` (the default), if CUDA runs out of memory while loading the model, transcribing, or retrying a chunk, the process releases its references to the GPU model and retries that work on CPU. It keeps the same model and completed chunks; subsequent chunks run on CPU. The output and `ejecucion.json` record the switch. `--device cuda` requires a GPU: an out-of-memory error stops execution with an explanatory message.
 
-Si aparece `CUDA out of memory`, puedes continuar directamente en CPU:
+If you encounter `CUDA out of memory`, you can continue directly on CPU:
 
 ```bash
 KARAOKE_PYTHON=.venv/bin/python ./karaoke-ass vocals.mp3 --device cpu
 ```
 
-El modelo `medium` tiene un requisito orientativo de unos 5 GB de VRAM según [Whisper](https://github.com/openai/whisper#available-models-and-languages). En una GPU de aproximadamente 4 GB, usa CPU para conservar `medium`, o prueba `--model small --device cuda` (unos 2 GB orientativos). El consumo real depende del audio y de otros procesos. Cambiar solo el dispositivo permite reutilizar los tramos guardados; cambiar el modelo invalida esa caché. La CPU puede tardar más.
+The `medium` model requires roughly 5 GB of VRAM according to [Whisper](https://github.com/openai/whisper#available-models-and-languages). On a GPU with approximately 4 GB, use CPU to keep `medium`, or try `--model small --device cuda` (roughly 2 GB). Actual usage depends on the audio and other processes. Changing only the device allows saved chunks to be reused; changing the model invalidates that cache. CPU processing may take longer.
 
-Para una pista en español con nombres propios conocidos:
-
-```bash
-./karaoke-ass vocals.mp3 --language es --prompt 'Nombres de artistas, lugares o marcas.' --output results/cancion
-```
-
-Para canciones que cambian entre español e inglés, conserva `--language auto`. La detección ocurre por tramo, por lo que puede fallar cuando el idioma cambia dentro del mismo tramo. `--chunk-seconds 12` permite tramos más cortos, con menos contexto lingüístico. Forzar un idioma se aplica a toda la ejecución y no traduce la letra.
+For a Spanish track with known proper names:
 
 ```bash
-./karaoke-ass vocals.mp3 --model small --device cpu --threads 4 --output results/prueba
-./karaoke-ass vocals.mp3 --start 12 --end 35 --output results/fragmento
+./karaoke-ass vocals.mp3 --language es --prompt 'Artist names, places, or brands.' --output results/song
 ```
 
-`small` es una opción para probar con menos recursos. La calidad depende de la pista; el rendimiento no se garantiza. Un fragmento conserva sus tiempos originales, no vuelve a comenzar en cero. Los modelos se obtienen y almacenan mediante la caché habitual de Whisper; `--model-dir` permite elegir otra carpeta.
+For songs that switch between Spanish and English, keep `--language auto`. Detection happens per chunk, so it may fail when the language changes within a chunk. `--chunk-seconds 12` allows shorter chunks with less linguistic context. Forcing a language applies to the entire run and does not translate the lyrics.
 
-## Archivos de salida
+```bash
+./karaoke-ass vocals.mp3 --model small --device cpu --threads 4 --output results/test
+./karaoke-ass vocals.mp3 --start 12 --end 35 --output results/excerpt
+```
 
-| Archivo | Contenido |
+`small` is an option for trying the tool with fewer resources. Quality depends on the track; performance is not guaranteed. An excerpt retains its original timestamps rather than starting again at zero. Models are downloaded and stored through Whisper's standard cache; `--model-dir` selects another directory.
+
+## Output files
+
+| File | Contents |
 | --- | --- |
-| `karaoke.ass` | Karaoke con resaltado progresivo `\kf`, dos líneas cuando hace falta, fuente blanca y resaltado amarillo. |
-| `transcripcion.txt` | Texto por evento con timestamps de salida. |
-| `transcripcion.json` | Palabras y tiempos normalizados, editables, en la línea temporal del audio original. |
-| `transcripcion.original.json` | Reconocimiento original, antes de descartar duplicados o reparar tiempos. |
-| `unidades.tsv` | Inicio/fin de cada unidad en la salida y en el audio original. |
-| `revision.txt`, `revision.json` | Avisos de confianza baja, palabras demasiado largas, reparaciones, posibles omisiones e idiomas sin división silábica. |
-| `ejecucion.json` | Opciones utilizadas, hash SHA-256 del audio, duración y estadísticas. |
-| `.checkpoint.json` | Resultados de reconocimiento por tramo, para reanudar. |
+| `karaoke.ass` | Karaoke with progressive `\kf` highlighting, two lines when needed, white text, and yellow highlighting. |
+| `transcripcion.txt` | Text for each event with output timestamps. |
+| `transcripcion.json` | Editable, normalized words and timings on the original audio timeline. |
+| `transcripcion.original.json` | Original recognition output, before removing duplicates or repairing timings. |
+| `unidades.tsv` | Start/end of each unit in the output and original audio. |
+| `revision.txt`, `revision.json` | Warnings about low confidence, overly long words, repairs, possible omissions, and languages without syllable splitting. |
+| `ejecucion.json` | Options used, audio SHA-256 hash, duration, and statistics. |
+| `.checkpoint.json` | Recognition results per chunk, used to resume processing. |
 
-El informe siempre indica que falta revisión de oído, aunque no aparezcan avisos específicos. La confianza de Whisper es orientativa. La detección de energía no distingue necesariamente una voz de restos instrumentales.
+The report always indicates that listening review is pending, even if there are no specific warnings. Whisper confidence is only a guide. Energy detection does not necessarily distinguish vocals from instrumental remnants.
 
-## Corregir y regenerar
-ruta/vocals.mp3 --output resultados/cancion
-Edita **una copia** de `transcripcion.json`: puedes cambiar `text`, `start`, `end` y `language` de cada palabra. Sus tiempos están en segundos del audio original. Cada palabra puede tener `language: "es"` o `"en"`; otros idiomas se conservan por palabra y se señalan en el informe.
+## Correcting and regenerating
+
+Edit **a copy** of `transcripcion.json`: you can change each word's `text`, `start`, `end`, and `language`. Timings are in seconds relative to the original audio. Each word can have `language: "es"` or `"en"`; other languages are preserved per word and flagged in the report.
 
 ```bash
-./karaoke-ass vocals.mp3 --from-json letra-corregida.json --output results/corregido
+./karaoke-ass vocals.mp3 --from-json corrected-lyrics.json --output results/corrected
 ```
 
-Esto vuelve a calcular el ASS y las unidades sin cargar Whisper. Se comprueba el hash del audio si el JSON lo incluye. También se admite un JSON directo de Whisper con `segments[].words[]`. No se admite un archivo de letra sin tiempos: requiere alineación adicional.
+This recalculates the ASS and units without loading Whisper. The audio hash is checked if the JSON includes it. Raw Whisper JSON with `segments[].words[]` is also supported. A lyrics file without timings is not supported: it requires additional alignment.
 
-Para nombres o préstamos, crea un diccionario de divisiones que reconstruyan exactamente la palabra:
+For names or borrowed words, create a dictionary of syllable splits that reconstruct each word exactly:
 
 ```json
 {
@@ -116,80 +116,79 @@ Para nombres o préstamos, crea un diccionario de divisiones que reconstruyan ex
 ```
 
 ```bash
-./karaoke-ass vocals.mp3 --from-json letra-corregida.json --syllables silabas.json --output results/ajustado
+./karaoke-ass vocals.mp3 --from-json corrected-lyrics.json --syllables syllables.json --output results/adjusted
 ```
 
-El diccionario controla la división textual, no corrige la letra ni determina límites fonéticos exactos. Las reglas de inglés son especialmente aproximadas.
+The dictionary controls text splitting; it does not correct lyrics or determine exact phonetic boundaries. The English rules are especially approximate.
 
-Opciones de presentación:
+Presentation options:
 
 ```bash
-./karaoke-ass vocals.mp3 --units word --effect k --offset 0.25 --output results/palabras
-./karaoke-ass vocals.mp3 --font 'DejaVu Sans' --font-size 64 --max-chars 72 --max-duration 6 --output results/estilo
+./karaoke-ass vocals.mp3 --units word --effect k --offset 0.25 --output results/words
+./karaoke-ass vocals.mp3 --font 'DejaVu Sans' --font-size 64 --max-chars 72 --max-duration 6 --output results/style
 ```
 
-`--offset` desplaza el ASS, el texto con timestamps y las columnas de salida del TSV. Los tiempos del JSON editable y los avisos conservan la referencia al audio original. Un desplazamiento negativo recorta las unidades que quedarían antes de cero. `--effect` acepta `kf`, `k` y `ko`. Las duraciones ASS se cuantizan a centésimas y se comprueba que sumen exactamente la duración de cada evento.
+`--offset` shifts the ASS, timestamped text, and TSV output columns. Timings in the editable JSON and warnings remain relative to the original audio. A negative offset clips units that would fall before zero. `--effect` accepts `kf`, `k`, and `ko`. ASS durations are quantized to hundredths of a second and checked to ensure they add up exactly to each event's duration.
 
-## Interrupciones y repetición
+## Interruptions and reruns
 
-Si se interrumpe el reconocimiento, repite el mismo comando. Reutiliza los tramos del checkpoint cuando coinciden el contenido del audio, el modelo y las opciones de reconocimiento. Un cambio de audio, idioma, prompt o tamaño de tramo invalida esa caché. El recálculo del estilo y las sílabas no invalida el reconocimiento.
+If recognition is interrupted, repeat the same command. Checkpoint chunks are reused when the audio content, model, and recognition options match. Changing the audio, language, prompt, or chunk size invalidates that cache. Recalculating styles and syllables does not invalidate recognition.
 
-Si ya existen archivos finales, el programa se detiene para evitar una sobrescritura accidental. Usa otra carpeta o `--overwrite`. `--no-resume` obliga a repetir el reconocimiento. El bloqueo de carpeta evita dos ejecuciones simultáneas sobre el mismo destino.
+If final output files already exist, the program stops to prevent accidental overwriting. Use another directory or `--overwrite`. `--no-resume` forces recognition to run again. A directory lock prevents two runs from writing to the same destination simultaneously.
 
-Las entradas sin palabras utilizables producen un error y conservan el reconocimiento original para diagnóstico; no se genera un ASS vacío. Ante un error, revisa el mensaje y el checkpoint. Códigos de salida: 0, resultado generado; 2, error; 130, interrupción. El código 0 confirma la generación de un borrador válido, no la exactitud de la letra.
+Inputs without usable words produce an error and preserve the original recognition output for diagnosis; an empty ASS is not generated. If an error occurs, check the message and checkpoint. Exit codes: 0, output generated; 2, error; 130, interrupted. Exit code 0 confirms that a valid draft was generated, not that its lyrics are accurate.
 
-## Procesar una carpeta
+## Processing a directory
 
 ```bash
-for pista in /ruta/vocals/*.mp3; do
-  [ -f "$pista" ] || continue
-  nombre="$(basename "${pista%.mp3}")"
-  ./karaoke-ass "$pista" --output "results/$nombre" || exit "$?"
+for track in /path/to/vocals/*.mp3; do
+  [ -f "$track" ] || continue
+  name="$(basename "${track%.mp3}")"
+  ./karaoke-ass "$track" --output "results/$name" || exit "$?"
 done
 ```
 
-Se procesa una canción por ejecución. Usa carpetas de salida diferentes para archivos con el mismo nombre base.
+One song is processed per run. Use separate output directories for files with the same base name.
 
-## Cómo funciona
+## How it works
 
-1. FFmpeg convierte a mono de 16 kHz para el reconocimiento.
-2. Se calcula una envolvente de energía de 10 ms y se recortan bordes silenciosos de cada ventana.
-3. Whisper reconoce tramos centrales de 24 s con hasta 2 s de contexto a cada lado, sin arrastrar la letra de la ventana anterior. Se desactiva el descarte global por probabilidad de no voz, que había omitido partes de la canción de referencia; los silencios se comprueban con energía.
-4. Cada palabra se asigna por su punto medio a un solo tramo central. Se eliminan repeticiones superpuestas, conservando las repeticiones cantadas en tiempos distintos.
-5. Se normalizan tiempos y se documentan reparaciones. Las palabras imposibles de ubicar se conservan en el reconocimiento original y se señalan.
-6. Si el reconocimiento cubre menos del 65 % de la señal activa de un tramo, se hace un segundo intento acotado con subtramos de hasta 12 s, sin prompt. Se selecciona por cobertura y confianza orientativa; esto no verifica la letra. `--no-retry` desactiva este paso.
-7. Se divide el texto en unidades y se estiman los cortes internos cerca de mínimos de energía dentro del intervalo de cada palabra.
-8. Se agrupan frases y se genera ASS, conservando las pausas con etiquetas de duración vacías. Se generan los archivos de edición y revisión.
+1. FFmpeg converts the audio to 16 kHz mono for recognition.
+2. A 10 ms energy envelope is calculated, and silent edges are trimmed from each window.
+3. Whisper recognizes central chunks of 24 s with up to 2 s of context on each side, without carrying lyrics over from the previous window. Global rejection based on no-speech probability is disabled because it omitted parts of the reference song; silence is checked using energy.
+4. Each word is assigned to a single central chunk using its midpoint. Overlapping repetitions are removed while preserving repetitions sung at different times.
+5. Timings are normalized and repairs are documented. Words that cannot be placed are retained in the original recognition output and flagged.
+6. If recognition covers less than 65% of a chunk's active signal, a bounded second attempt uses subchunks of up to 12 s without a prompt. Selection uses coverage and approximate confidence; this does not verify the lyrics. `--no-retry` disables this step.
+7. Text is split into units, and boundaries within words are estimated near energy minima inside each word's interval.
+8. Phrases are grouped and ASS is generated, preserving pauses with empty duration tags. Editing and review files are generated.
 
-Este programa automatiza la primera versión que antes armamos con varias ejecuciones y selección manual de fragmentos. No incluye reglas específicas de aquella canción.
+This program automates the first version we previously assembled through multiple runs and manual selection of excerpts. It contains no rules specific to that song.
 
-## Pruebas
+## Tests
 
-Con el entorno inicializado, ejecuta `mise run test` o `mise run test:lyrics`. También puedes ejecutar directamente:
+With the environment initialized, run `mise run test` or `mise run test:lyrics`. You can also run directly:
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Las pruebas cubren silabeo, conservación del texto, tiempos inválidos, límites de ventana, repeticiones, reanudación, protección de salidas, pausas, desplazamientos y regeneración. Las pruebas del reconocedor usan un modelo simulado para comprobar el ensamblado; la prueba de reconocimiento con audio real se documenta por separado en `VALIDACION.md`.
+Tests cover syllable splitting, text preservation, invalid timings, window boundaries, repetitions, resuming, output protection, pauses, offsets, and regeneration. Recognition tests use a mock model to check assembly; testing recognition with real audio is documented separately in `VALIDACION.md`.
 
-Referencias: [Whisper](https://github.com/openai/whisper), [etiquetas ASS de karaoke de Aegisub](https://aegisub.org/docs/latest/ass_tags/#karaoke-effect).
+References: [Whisper](https://github.com/openai/whisper), [Aegisub ASS karaoke tags](https://aegisub.org/docs/latest/ass_tags/#karaoke-effect).
 
-## Corrección opcional con letras de internet
+## Optional correction using online lyrics
 
 ```bash
 ./karaoke-ass vocals.wav --artist "Modern Talking" --title "Cheri Cheri Lady"
 ```
 
-`--artist` y `--title` deben incluirse juntos y no pueden estar vacíos. Después de completar Whisper, se consulta [LRCLIB](https://lrclib.net/docs) por artista y título, sin clave de API. También funciona con `--from-json`, para corregir una transcripción existente sin repetir Whisper. Sin estos argumentos no se consulta internet. Solo se envían artista y título; el audio y la transcripción permanecen locales.
+`--artist` and `--title` must be supplied together and cannot be empty. After Whisper completes, [LRCLIB](https://lrclib.net/docs) is queried by artist and title without an API key. This also works with `--from-json`, allowing an existing transcription to be corrected without running Whisper again. Without these arguments, no internet requests are made. Only the artist and title are sent; audio and transcription remain local.
 
-Las correcciones son conservadoras: se sustituyen únicamente palabras de similitud mínima 0,75 entre anclas únicas de al menos dos palabras coincidentes a cada lado. No se agregan ni eliminan palabras, ni se cambian sus tiempos. Las repeticiones ambiguas y otras diferencias se señalan para revisión. Las letras anteriores o posteriores al intervalo transcrito no se agregan. Los tiempos LRC no se utilizan.
+Corrections are conservative: only words with a minimum similarity of 0.75 are replaced, between unique anchors of at least two matching words on each side. Words are neither added nor removed, and their timings do not change. Ambiguous repetitions and other differences are flagged for review. Lyrics before or after the transcribed interval are not added. LRC timings are not used.
 
-Primero se guarda `transcripcion.json`, luego se corrige ese archivo con la letra descargada y se vuelve a cargar el JSON corregido para generar ASS, TXT y TSV. `transcripcion.original.json` conserva la entrada sin corregir; el checkpoint tampoco cambia. `revision.json` y `ejecucion.json` registran la fuente, el identificador, el estado, las sustituciones y las diferencias sin resolver; `revision.txt` incluye un resumen y los avisos. El resultado sigue siendo un borrador pendiente de revisión auditiva.
+First, `transcripcion.json` is saved, then that file is corrected using the downloaded lyrics, and the corrected JSON is loaded again to generate ASS, TXT, and TSV. `transcripcion.original.json` preserves the uncorrected input; the checkpoint also remains unchanged. `revision.json` and `ejecucion.json` record the source, identifier, status, replacements, and unresolved differences; `revision.txt` includes a summary and warnings. The result remains a draft awaiting listening review.
 
-Si la consulta falla, tarda más de 10 segundos, no devuelve letra o sus metadatos no coinciden, se muestra un aviso y se generan los resultados con el texto original. El catálogo puede no incluir la canción o su versión específica.
+If the request fails, takes more than 10 seconds, returns no lyrics, or returns mismatched metadata, a warning is shown and output is generated using the original text. The catalog may not include the song or its specific version.
 
+### Karaoke text preview
 
-### Anticipación visual del karaoke
-
-Cada evento del ASS muestra el texto 200 ms antes de la primera palabra, sin adelantar el resaltado ni modificar los tiempos del JSON, TXT o TSV. Al comienzo del archivo, la anticipación se limita a cero. Los eventos consecutivos pueden coincidir durante esos 200 ms para mantener el final cantado de la frase anterior. Esta anticipación es independiente de `--offset`, que desplaza la sincronización completa.
+Each ASS event displays its text 200 ms before the first word, without advancing the highlighting or changing JSON, TXT, or TSV timings. At the beginning of the file, the preview is clamped to time zero. Consecutive events may overlap during those 200 ms to preserve the sung ending of the previous phrase. This preview is independent of `--offset`, which shifts the entire synchronization.
