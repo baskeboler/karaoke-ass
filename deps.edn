@@ -1,0 +1,8 @@
+{:paths ["src" "legacy"]
+ :deps {org.clojure/clojure {:mvn/version "1.12.4"}
+        org.clojure/data.json {:mvn/version "2.5.2"}}
+ :aliases {:run {:main-opts ["-m" "karaoke-ass.cli"]}
+           :repl {:extra-paths ["dev" "test"]
+                  :main-opts ["-r"]}
+           :test {:extra-paths ["test"]
+                  :main-opts ["-m" "karaoke-ass.test-runner"]}}}

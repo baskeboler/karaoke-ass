@@ -1,5 +1,7 @@
 # Uso en este equipo
 
+La aplicación se ejecuta ahora en Clojure/JVM: requiere Java 17+, Clojure CLI y FFmpeg. `./karaoke-ass --from-json …` no necesita Python. Para reconocimiento nuevo, `KARAOKE_PYTHON` selecciona únicamente el proceso de inferencia Whisper. Usa `clojure -M:test` para las pruebas de la implementación actual.
+
 Hay un entorno con Whisper instalado en `/home/victorgil/tmp/venv` y modelos `base`, `small` y `medium` ya descargados. Esta es una configuración local, no un requisito del proyecto.
 
 Desde la carpeta de la herramienta:

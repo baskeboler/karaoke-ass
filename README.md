@@ -6,28 +6,37 @@ A local tool that turns a song's vocal track into ASS karaoke subtitles. It take
 
 ## Installation
 
-Requires Linux or macOS, Python 3.10 or later, and FFmpeg available on the system. The Whisper version used and tested is `20250625`; the tool was also tested with PyTorch 2.10.0 and NumPy 2.4.3.
+The application runs on **Clojure/JVM**. Requires Java 17 or later, [Clojure CLI](https://clojure.org/guides/install_clojure), and FFmpeg on PATH. Dependencies are declared in `deps.edn`: Clojure 1.12.4 and `org.clojure/data.json` 2.5.2. Dependency documentation was checked through Context7 against the Clojure and data.json repositories.
 
-From this directory:
+```bash
+clojure -P -M:test
+./karaoke-ass --help
+clojure -M:test
+```
+
+`./karaoke-ass` is the Clojure launcher. Relative audio, JSON, dictionary, model, and output paths are relative to the directory from which you invoke it. `clojure -M:run …` also works from the project root. Set `KARAOKE_CLOJURE` to select another Clojure CLI executable.
+
+**Regeneration with `--from-json` needs no Python, NumPy, or Whisper.** Once JVM dependencies are installed, it runs locally; optional `--artist`/`--title` still enable the LRCLIB request described below. The Clojure code decodes audio through FFmpeg, computes energy, normalizes timings, splits syllables, handles corrections/checkpoints/locking, and writes all output files.
+
+Fresh recognition uses a small persistent Python inference adapter in `legacy/whisper_worker.py`, because the existing Whisper/PyTorch model runtime is Python. It only loads the model and transcribes sample ranges supplied by Clojure; all application logic is in `src/karaoke_ass/`. To enable it:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install '.[speech]'
+.venv/bin/python -m pip install -r legacy/requirements.txt
+./karaoke-ass vocals.mp3 --model base --device cpu
 ```
 
-PyTorch may install large packages. On a CPU-only machine, you can install the CPU variant first, following the [PyTorch instructions](https://pytorch.org/get-started/locally/), then install this project.
-
-If you already have an environment with Whisper and NumPy, you can reuse it without installing another copy:
+The inference adapter selects `KARAOKE_PYTHON`, `.venv/bin/python`, or `python3`, in that order. An existing speech environment can be reused:
 
 ```bash
 KARAOKE_PYTHON=/path/to/environment/bin/python ./karaoke-ass vocals.mp3
 ```
 
-The launcher selects, in order: `KARAOKE_PYTHON`, `.venv/bin/python`, or `python3`. You can also install the package and use the `karaoke-ass` command from any directory.
+Whisper/PyTorch can require large downloads. Model downloads and their cache still use Whisper's normal behavior. Inference uses the existing version, `20250625`; no remote inference service is used.
 
 ## Development environment with mise
 
-Install [mise](https://mise.jdx.dev/getting-started.html) and FFmpeg using your system's package manager. From the project root:
+Install Java, Clojure CLI, FFmpeg, and [mise](https://mise.jdx.dev/getting-started.html). The mise configuration retains Python 3.12 and `.venv` for the optional inference adapter and its tests.
 
 ```bash
 mise trust
@@ -36,17 +45,19 @@ mise run setup
 mise run test
 ```
 
-`mise.toml` selects Python 3.12 and automatically creates/activates `.venv`. `setup` installs the package in editable mode with its basic dependencies; it does not download Whisper or its models. The configuration reuses an existing `.venv`: if it was created with another Python version, rename it before initialization so mise can create a new one with Python 3.12. `.venv` remains ignored by Git.
-
 | Task | Purpose |
 | --- | --- |
-| `mise run setup` | Install or update the basic development and testing environment. |
-| `mise run setup:speech` | Also install Whisper/PyTorch for audio transcription. |
-| `mise run check:ffmpeg` | Check FFmpeg, required by the full test suite and audio processing. |
-| `mise run test` | Run the full suite after checking FFmpeg. |
-| `mise run test:lyrics` | Run only the lyrics tests, without requiring FFmpeg. |
+| `mise run setup` | Fetch Clojure development/test dependencies. |
+| `mise run setup:speech` | Also install the optional Whisper/PyTorch runtime. |
+| `mise run repl` | Start a Clojure REPL with `dev/user.clj` loaded automatically. |
+| `mise run check:ffmpeg` | Check FFmpeg. |
+| `mise run test` | Run the Clojure suite, including real FFmpeg decoding with synthetic audio. |
+| `mise run test:lyrics` | Run Clojure lyric tests without FFmpeg or network requests. |
+| `mise run test:inference` | Test the Python inference adapter's CUDA recovery with mocks; needs only Python's standard library. |
 
-For real speech recognition, run `mise run setup:speech`, then `mise exec -- karaoke-ass vocals.wav`. Installation may download large dependencies; models are downloaded when you first transcribe. Test tasks do not install dependencies: run `setup` first. Whisper recognition and HTTP requests are mocked in tests. You can use `mise exec -- python …` without activating mise in your shell.
+Clojure application code lives in `src/karaoke_ass/`, with tests in `test/karaoke_ass/`. The remaining Python code is confined to `legacy/`: the Whisper inference adapter and its tests. The superseded Python application, its tests, packaging, and migration comparison script have been removed. Invoke this repository's `./karaoke-ass` to use Clojure.
+
+Start the development REPL with `mise run repl` or `clojure -M:repl`. The `:repl` alias adds `dev/` and `test/` to the classpath, so Clojure loads `dev/user.clj` automatically. The `user` namespace provides aliases for the application modules, standard REPL helpers such as `doc` and `source`, and `(test-all)` to run the suite without closing the REPL. For example, evaluate `(syllables/split-word "canción" "es" {})` or `(cli/main ["--help"])`.
 
 ## Usage
 
@@ -134,7 +145,7 @@ Presentation options:
 
 If recognition is interrupted, repeat the same command. Checkpoint chunks are reused when the audio content, model, and recognition options match. Changing the audio, language, prompt, or chunk size invalidates that cache. Recalculating styles and syllables does not invalidate recognition.
 
-If final output files already exist, the program stops to prevent accidental overwriting. Use another directory or `--overwrite`. `--no-resume` forces recognition to run again. A directory lock prevents two runs from writing to the same destination simultaneously.
+If final output files already exist, the program stops to prevent accidental overwriting. Use another directory or `--overwrite`. `--no-resume` forces recognition to run again. A JVM/OS file lock prevents two Clojure runs from writing to the same destination simultaneously.
 
 Inputs without usable words produce an error and preserve the original recognition output for diagnosis; an empty ASS is not generated. If an error occurs, check the message and checkpoint. Exit codes: 0, output generated; 2, error; 130, interrupted. Exit code 0 confirms that a valid draft was generated, not that its lyrics are accurate.
 
@@ -165,13 +176,13 @@ This program automates the first version we previously assembled through multipl
 
 ## Tests
 
-With the environment initialized, run `mise run test` or `mise run test:lyrics`. You can also run directly:
-
 ```bash
-PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
+clojure -M:test
+clojure -M:test lyrics
+python3 -m unittest discover -s legacy/tests -p test_whisper_worker.py -v
 ```
 
-Tests cover syllable splitting, text preservation, invalid timings, window boundaries, repetitions, resuming, output protection, pauses, offsets, and regeneration. Recognition tests use a mock model to check assembly; testing recognition with real audio is documented separately in `VALIDACION.md`.
+Tests cover syllable splitting, text preservation, invalid timings, window ownership, repetitions, retries, checkpoint reuse, output protection, pauses, preview, offsets, conservative lyrics, and real FFmpeg decoding/regeneration. Whisper and HTTP responses are mocked in unit tests. Inference adapter tests cover CUDA recovery without loading models. Real model validation and historical migration comparisons are recorded in `VALIDACION.md`.
 
 References: [Whisper](https://github.com/openai/whisper), [Aegisub ASS karaoke tags](https://aegisub.org/docs/latest/ass_tags/#karaoke-effect).
 

@@ -1,17 +1,22 @@
 [tools]
+java = "semeru-openj9-25"
 python = "3.12"
 
 [env]
 _.python.venv = { path = ".venv", create = true, uv_create_args = ["--seed"] }
 
 [tasks.setup]
-description = "Inicializar .venv e instalar el paquete editable para desarrollo y tests"
-run = "python -m pip install -e ."
+description = "Descargar dependencias Clojure para desarrollo y tests (requiere Java 17+ y Clojure CLI)"
+run = "clojure -P -M:test"
 
 [tasks."setup:speech"]
-description = "Inicializar desarrollo e instalar Whisper y sus dependencias"
+description = "Instalar el backend opcional de inferencia Whisper y sus dependencias Python"
 depends = ["setup"]
-run = "python -m pip install -e '.[speech]'"
+run = "python -m pip install -r legacy/requirements.txt"
+
+[tasks.repl]
+description = "Iniciar REPL Clojure con dev/user.clj y acceso a las pruebas"
+run = "clojure -M:repl"
 
 [tasks."check:ffmpeg"]
 description = "Comprobar que FFmpeg esté instalado y accesible"
@@ -20,10 +25,12 @@ run = "ffmpeg -version"
 [tasks.test]
 description = "Ejecutar toda la suite (Whisper y consultas de letras simulados)"
 depends = ["check:ffmpeg"]
-env = { PYTHONPATH = "src" }
-run = "python -m unittest discover -s tests -v"
+run = "clojure -M:test"
 
 [tasks."test:lyrics"]
 description = "Ejecutar solo las pruebas de búsqueda y corrección de letras"
-env = { PYTHONPATH = "src" }
-run = "python -m unittest discover -s tests -p test_lyrics.py -v"
+run = "clojure -M:test lyrics"
+
+[tasks."test:inference"]
+description = "Verificar adaptador Whisper sin cargar modelos ni requerir GPU"
+run = "python -m unittest discover -s legacy/tests -p test_whisper_worker.py -v"
